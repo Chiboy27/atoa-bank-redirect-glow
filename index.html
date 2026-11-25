@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bank Redirect Glow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ffffff; --text:#0b0d12; --muted:#5f6b7a; --line:#eef0f3; --chip:#f5f6f8; --page:#eceef2;
+    --violet:#7a3df2; --pink:#f3b4e6; --peach:#f7a464; --core:#f6c9ec;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --page:#16181d; } }
+  :root[data-theme="dark"]{ --page:#16181d; }
+  .phone[data-theme="dark"]{ --bg:#0e1014; --text:#f4f5f7; --muted:#97a1ae; --line:#1d2129; --chip:#1a1d24; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:Figtree,system-ui,sans-serif;background:var(--page);color:var(--text);
+       display:flex;align-items:center;justify-content:center;gap:40px;padding:24px;-webkit-tap-highlight-color:transparent}
+
+  /* ---------- phone shell ---------- */
+  .phone{position:relative;width:375px;height:812px;background:var(--bg);color:var(--text);
+         border-radius:48px;overflow:hidden;flex:none;
+         box-shadow:0 0 0 9px #ebe8e2,0 0 0 10px #d4d0c8,0 40px 80px rgba(15,20,30,.16)}
+  .stage{position:absolute;inset:0;background:var(--bg);overflow:hidden}
+  .island{position:absolute;top:11px;left:50%;width:120px;height:34px;margin-left:-60px;border-radius:20px;background:#000;z-index:9}
+  .status{position:relative;z-index:8;height:54px;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 36px;font-weight:600;font-size:15px}
+  .status .icons{display:flex;gap:6px;align-items:center}
+  .app{position:absolute;inset:54px 0 0 0;}
+  .header{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+  .logo{font-weight:800;font-size:22px;letter-spacing:-.5px}
+  .help{width:32px;height:32px;border-radius:9px;background:var(--chip);display:grid;place-items:center;border:1px solid var(--line)}
+
+  /* ---------- bank picker ---------- */
+  .picker{padding:14px 16px}
+  .amount{font-size:44px;font-weight:700;letter-spacing:-1px;text-align:center;margin:10px 0 2px}
+  .to{font-size:14px;color:var(--muted);text-align:center;margin-bottom:26px}
+  .picker h2{font-size:15px;font-weight:600;margin-bottom:10px}
+  .bank{display:flex;align-items:center;gap:14px;padding:12px;border-radius:14px;cursor:pointer;border:1px solid var(--line);margin-bottom:8px;background:var(--bg);font:inherit;color:inherit;width:100%;text-align:left}
+  .bank .t{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-weight:800;color:#fff;font-size:15px}
+  .bank span{font-weight:600;font-size:15px;flex:1}
+  .radio{width:20px;height:20px;border-radius:50%;border:1.5px solid #c9ced6}
+  .bank.sel{border-color:var(--text)}
+  .bank.sel .radio{border:6px solid var(--text)}
+
+  /* CTA – crossfades into a pre-softened glowing pill (no animated blur) */
+  .cta{position:absolute;left:16px;right:16px;bottom:30px;height:54px;border-radius:27px;border:0;z-index:6;cursor:pointer;
+       font:inherit;font-weight:600;font-size:16px;color:#fff;background:#0b0d12;
+       transition:transform .25s cubic-bezier(.2,.8,.2,1), opacity .35s ease, background-color .2s ease;will-change:transform,opacity}
+  .cta.pressed{transform:scale(.97);background-color:#8a8f98}
+  .cta.glowing{opacity:0;transform:scale(1.04);pointer-events:none}
+  .pillGlow{position:absolute;left:0;right:0;bottom:7px;height:100px;z-index:5;pointer-events:none;opacity:0;transform:scaleX(.85);
+       transition:opacity .45s ease, transform .7s cubic-bezier(.2,.8,.2,1);will-change:opacity,transform;
+       background:linear-gradient(90deg,var(--violet) 8%,var(--pink) 32%,#fff 50%,#ffd9bd 66%,var(--peach) 92%);
+       -webkit-mask-image:radial-gradient(closest-side,#000 45%,transparent 100%);mask-image:radial-gradient(closest-side,#000 45%,transparent 100%)}
+  .phone.glowing .pillGlow{opacity:1;transform:scaleX(1)}
+  .phone.whoosh .pillGlow{opacity:0;transition:opacity .18s ease}
+
+  /* ---------- overlay: only transform + opacity ever animate ---------- */
+  .app{transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+  .phone.busy .app{transform:scale(.97)}
+  .veil{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;will-change:opacity;
+        transition:opacity .55s cubic-bezier(.4,0,.2,1);background:rgba(255,255,255,.45);
+        -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+  .phone.busy .veil{opacity:1}
+  .phone[data-theme="dark"] .veil{background:rgba(14,16,20,.6)}
+  .whiteout{position:absolute;inset:0;z-index:2;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .5s cubic-bezier(.4,0,.2,1)}
+  .phone.done .whiteout{opacity:1}
+
+  .glow{position:absolute;left:-20%;width:140%;top:0;height:52%;z-index:3;pointer-events:none;opacity:0;
+        transform:translateY(120%);will-change:transform,opacity}
+  .breath{position:absolute;inset:0;will-change:transform}
+  .phone.run .breath{animation:breath 2.2s cubic-bezier(.45,0,.55,1) infinite alternate}
+  @keyframes breath{from{transform:none}to{transform:translateY(-3%) scale(1.05,1.1)}}
+  .blob{position:absolute;border-radius:50%;will-change:transform}
+  .b1{left:-2%;top:16%;width:62%;height:96%;background:radial-gradient(closest-side,rgba(122,61,242,.95),rgba(122,61,242,.55) 45%,rgba(122,61,242,.15) 75%,rgba(122,61,242,0))}
+  .b3{right:-2%;top:16%;width:62%;height:96%;background:radial-gradient(closest-side,rgba(247,164,100,.95),rgba(247,164,100,.55) 45%,rgba(247,164,100,.15) 75%,rgba(247,164,100,0))}
+  .b2{left:18%;top:2%;width:64%;height:110%;background:radial-gradient(closest-side,rgba(243,180,230,.95),rgba(243,180,230,.6) 45%,rgba(243,180,230,.18) 75%,rgba(243,180,230,0))}
+  .core{left:32%;top:18%;width:36%;height:72%;opacity:.7;background:radial-gradient(closest-side,rgba(246,201,236,1),rgba(246,201,236,.6) 50%,rgba(246,201,236,0))}
+  .phone.run .b1{animation:d1 2.4s cubic-bezier(.45,0,.55,1) infinite alternate}
+  .phone.run .b2{animation:d2 2s cubic-bezier(.45,0,.55,1) infinite alternate}
+  .phone.run .b3{animation:d3 2.6s cubic-bezier(.45,0,.55,1) infinite alternate}
+  @keyframes d1{to{transform:translate(12%,-7%) scale(1.1)}}
+  @keyframes d2{to{transform:translate(-5%,-8%) scale(1.06)}}
+  @keyframes d3{to{transform:translate(-10%,-4%) scale(1.12)}}
+
+  .label{position:absolute;left:0;right:0;top:50%;margin-top:-12px;z-index:5;display:flex;justify-content:center;pointer-events:none;opacity:0;transition:opacity .35s}
+  .phone.busy .label{opacity:1}
+  .line{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:500;letter-spacing:-.1px}
+  .ico{width:15px;height:15px;position:relative}
+  .spin{position:absolute;inset:0;border-radius:50%;border:1.6px solid currentColor;border-right-color:transparent;opacity:.7;animation:spin .8s linear infinite;transition:opacity .15s}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tick{position:absolute;inset:0;border-radius:50%;background:var(--text);display:grid;place-items:center;transform:scale(0);transition:transform .35s cubic-bezier(.2,1.6,.4,1)}
+  .tick svg{width:9px;height:9px}
+  .phone.done .spin{opacity:0}
+  .phone.done .tick{transform:scale(1)}
+  .swap{transition:opacity .12s}
+
+  .stage{will-change:transform}
+
+  /* hand-off placeholder */
+  .handoff{position:absolute;inset:0;z-index:10;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .35s}
+  .handoff.show{opacity:1;pointer-events:auto}
+  .handoff .tag{font-size:13px;color:var(--muted);background:var(--chip);border:1px solid var(--line);padding:8px 14px;border-radius:99px}
+  .btn{font:inherit;font-weight:600;font-size:15px;border:0;border-radius:12px;padding:12px 18px;background:var(--text);color:var(--bg);cursor:pointer}
+
+  .hap{position:absolute;left:-9999px;opacity:0}
+
+  /* ---------- side panel ---------- */
+  .panel{width:300px;font-size:14px;line-height:1.5}
+  .panel h3{font-size:18px;margin-bottom:6px}
+  .panel p{color:#5f6b7a;margin-bottom:14px}
+  .panel .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid #dde1e6}
+  .panel code{font-size:12px;background:#fff;padding:2px 6px;border-radius:6px}
+  .panel .btn{margin-top:14px;width:100%;background:#0b0d12;color:#fff}
+  .panel ol{padding-left:18px;color:#5f6b7a;margin-top:12px}
+
+  @media (max-width:500px){
+    body{padding:0;display:block;background:var(--bg)}
+    .phone{width:100vw;height:100vh;height:100dvh;border-radius:0;box-shadow:none}
+    .status,.island{display:none}
+    .app{inset:0}
+    .cta{bottom:calc(20px + env(safe-area-inset-bottom))}
+    .pillGlow{bottom:calc(-3px + env(safe-area-inset-bottom))}
+    .panel{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone" data-theme="light">
+ <div class="island"></div>
+ <div class="stage" id="stage">
+  <div class="status"><span>9:41</span>
+    <span class="icons">
+      <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5" width="3" height="7" rx="1" fill="currentColor"/><rect x="10" y="2.5" width="3" height="9.5" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 11.5l2.2-2.6a3 3 0 00-4.4 0L8 11.5zM3.6 6.4a6.3 6.3 0 018.8 0l1.4-1.6a8.5 8.5 0 00-11.6 0l1.4 1.6zM.8 3.1a10.6 10.6 0 0114.4 0L16 2a12 12 0 00-16 0l.8 1.1z" fill="currentColor"/></svg>
+      <svg width="26" height="12" viewBox="0 0 26 12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="19" height="8" rx="2" fill="currentColor"/><rect x="24" y="4" width="1.5" height="4" rx=".75" fill="currentColor" opacity=".4"/></svg>
+    </span>
+  </div>
+
+  <div class="app" id="app">
+    <div class="header">
+      <div class="logo">AtoA</div>
+      <div class="help"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></svg></div>
+    </div>
+    <section class="picker">
+      <div class="amount">£24.50</div>
+      <div class="to">to The Corner Café</div>
+      <h2>Pay from</h2>
+      <button class="bank sel"><div class="t" style="background:#9fe870;color:#163300">L</div><span>Lloyds</span><i class="radio"></i></button>
+      <button class="bank"><div class="t" style="background:#1d3b8b">B</div><span>Barclays</span><i class="radio"></i></button>
+      <button class="bank"><div class="t" style="background:#d4232a">S</div><span>Santander</span><i class="radio"></i></button>
+      <button class="bank"><div class="t" style="background:#5a287d">N</div><span>NatWest</span><i class="radio"></i></button>
+      <button class="bank"><div class="t" style="background:#00a3e0">M</div><span>Monzo</span><i class="radio"></i></button>
+    </section>
+  </div>
+
+  <div class="veil"></div>
+  <div class="whiteout"></div>
+  <div class="glow" id="glow"><div class="breath"><div class="blob b1"></div><div class="blob b3"></div><div class="blob b2"></div><div class="blob core" id="core"></div></div></div>
+  <div class="pillGlow"></div>
+  <div class="label">
+    <div class="line">
+      <span class="ico"><span class="spin"></span><span class="tick"><svg viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.2l2 2L8 3"/></svg></span></span>
+      <span class="swap" id="title">Connecting to Lloyds</span>
+    </div>
+  </div>
+  <button class="cta" id="cta"><span class="txt" id="ctaTxt">Continue to Lloyds</span></button>
+ </div>
+
+  <div class="handoff" id="handoff">
+    <div class="tag">Lloyds app opens here</div>
+    <button class="btn" id="again">Replay</button>
+  </div>
+
+  <label class="hap" id="hapLabel"><input type="checkbox" switch>h</label>
+</div>
+
+<aside class="panel">
+  <h3>Bank redirect · glow</h3>
+  <p>Pick a bank and tap <b>Continue</b>. The tap is the user gesture that lets the browser vibrate.</p>
+  <div class="row"><span>Haptics on this device</span><code id="hapMode">–</code></div>
+  <div class="row"><span>Preview dark mode</span><input type="checkbox" id="darkToggle"></div>
+  <button class="btn" id="replayPanel">Replay</button>
+  <ol>
+    <li>Button greys, then turns into a glowing pill</li>
+    <li>Screen blurs; violet → pink → peach glow builds at the bottom</li>
+    <li>Glow shoots up through the middle to the top: jolt + rumble</li>
+    <li>"Opening Lloyds" ✓, glow fades into the notch, bank app opens</li>
+    <li>Dark mode / Reduce Motion: plain loading state</li>
+  </ol>
+</aside>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const phone = $('phone'), stage = $('stage'), glow = $('glow'), core = $('core');
+  const cta = $('cta'), title = $('title'), handoff = $('handoff');
+
+  /* ---------- theme: effect is light-mode only ---------- */
+  const mqDark = matchMedia('(prefers-color-scheme: dark)');
+  const mqReduce = matchMedia('(prefers-reduced-motion: reduce)');
+  let forcedDark = false;
+  const isDark = () => forcedDark || mqDark.matches;
+  const applyTheme = () => phone.dataset.theme = isDark() ? 'dark' : 'light';
+  applyTheme(); mqDark.addEventListener?.('change', applyTheme);
+  $('darkToggle').onchange = e => { forcedDark = e.target.checked; applyTheme(); };
+
+  /* bank selection */
+  document.querySelectorAll('.bank').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.bank').forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel');
+    const name = b.querySelector('span').textContent;
+    $('ctaTxt').textContent = 'Continue to ' + name;
+    phone.dataset.bank = name;
+  });
+  phone.dataset.bank = 'Lloyds';
+
+  /* ---------- haptics ---------- */
+  const canVibrate = typeof navigator.vibrate === 'function';
+  const hapLabel = $('hapLabel');
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  $('hapMode').textContent = canVibrate ? 'Vibration API' : isIOS ? 'iOS switch tick' : 'none (visual only)';
+  const iosTick = () => { try { hapLabel.click(); } catch(e){} };
+  function buzz(pattern) {
+    if (canVibrate) { try { navigator.vibrate(pattern); } catch(e){} return; }
+    if (!isIOS) return;
+    let t = 0;
+    pattern.forEach((d, i) => { if (i % 2 === 0) setTimeout(iosTick, t); t += d; });
+  }
+
+  /* ---------- glow path (px, from stage height) ---------- */
+  const H = () => stage.getBoundingClientRect().height;
+  const pos = h => ({
+    hidden: `translateY(${h * 0.95}px) scale(.55,.5)`,
+    pill:   `translateY(${h * 0.80}px) scale(.7,.35)`,
+    bottom: `translateY(${h * 0.62}px) scale(1,1)`,
+    swell:  `translateY(${h * 0.58}px) scale(1.06,1.12)`,
+    center: `translateY(${h * 0.24}px) scale(.82,1.05)`,
+    top:    `translateY(${-h * 0.17}px) scale(1,.85)`,
+    gone:   `translateY(${-h * 0.32}px) scale(.45,.4)`,
+  });
+
+  /* ---------- sequence ---------- */
+  let timers = [], anims = [], glowAnim = null;
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const anim = (el, kf, opt) => { const a = el.animate(kf, { fill: 'forwards', ...opt }); anims.push(a); return a; };
+  // hand the glow from one animation to the next in the same frame → no seams
+  const glowTo = (kf, opt) => { const prev = glowAnim; glowAnim = anim(glow, kf, opt); prev && prev.cancel(); return glowAnim; };
+
+  // damped shake, generated so it decays like a real vibration motor
+  function shake(amp, dur, hz = 9) {
+    const n = 36, kf = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, d = Math.exp(-4.5 * t);
+      const x = amp * d * Math.sin(t * 6.283 * hz);
+      const y = amp * .35 * d * Math.sin(t * 6.283 * (hz - 2) + 1);
+      const r = amp * .1 * d * Math.sin(t * 6.283 * (hz - 1) + 2);
+      kf.push({ transform: `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) rotate(${r.toFixed(3)}deg)` });
+    }
+    anim(stage, kf, { duration: dur, easing: 'linear', fill: 'none' });
+  }
+
+  function reset() {
+    timers.forEach(clearTimeout); timers = [];
+    anims.forEach(a => a.cancel()); anims = []; glowAnim = null;
+    phone.classList.remove('busy', 'run', 'done', 'glowing', 'whoosh');
+    cta.className = 'cta'; cta.disabled = false;
+    handoff.classList.remove('show');
+    title.textContent = 'Connecting to ' + phone.dataset.bank; title.style.opacity = 1;
+  }
+
+  function play() {
+    reset();
+    const bank = phone.dataset.bank;
+    title.textContent = 'Connecting to ' + bank;
+    cta.disabled = true;
+    cta.classList.add('pressed');
+    buzz([10]);                                    // tick inside the tap gesture
+
+    if (isDark() || mqReduce.matches) {           // light-mode only → plain loading state
+      at(250, () => { phone.classList.add('busy'); cta.classList.add('glowing'); });
+      at(2200, () => { phone.classList.add('done'); title.textContent = 'Opening ' + bank; });
+      at(3000, () => handoff.classList.add('show'));
+      return;
+    }
+
+    const p = pos(H());
+    // 1 · button → glowing pill, UI blurs, glow rises out of the pill
+    at(260, () => {
+      phone.classList.add('busy', 'run', 'glowing');
+      cta.classList.remove('pressed'); cta.classList.add('glowing');
+      glowTo([{ transform: p.hidden, opacity: 0 }, { transform: p.pill, opacity: .75, offset: .35 }, { transform: p.bottom, opacity: 1 }],
+             { duration: 1200, easing: 'cubic-bezier(.22,.8,.3,1)' });
+      shake(1.5, 260, 12);
+    });
+    at(1500, () => buzz([8, 140, 8]));             // soft heartbeat while it breathes
+    // 2 · whoosh: bottom → centre (bright ball) → top, one continuous curve
+    at(2650, () => {
+      phone.classList.add('whoosh');
+      const w = glowTo([
+        { transform: p.bottom, opacity: 1 },
+        { transform: p.center, opacity: 1, offset: .48 },
+        { transform: p.top,    opacity: 1 }],
+        { duration: 440, easing: 'cubic-bezier(.6,0,.25,1)' });
+      anim(core, [{ opacity: .7, transform: 'scale(1)' }, { opacity: 1, transform: 'scale(1.8)', offset: .5 }, { opacity: .8, transform: 'scale(1.15)' }],
+           { duration: 440, easing: 'cubic-bezier(.6,0,.25,1)' });
+      timers.push(setTimeout(() => { shake(6, 560); buzz([55, 20, 55, 20, 90, 25, 30, 20, 30, 20, 20]); }, 160));
+      // 3 · settle at the top, then drift up into the notch
+      w.finished.then(() => glowTo([{ transform: p.top, opacity: 1 }, { transform: p.gone, opacity: 0 }],
+                                   { duration: 1000, easing: 'cubic-bezier(.3,0,.2,1)', delay: 120, fill: 'both' })).catch(() => {});
+    });
+    // state flips as the ball passes the label
+    at(2830, () => { title.style.opacity = 0; });
+    at(2890, () => { phone.classList.add('done'); title.textContent = 'Opening ' + bank; title.style.opacity = 1; });
+    at(4250, () => handoff.classList.add('show'));   // real build: window.location = bankDeepLink
+  }
+
+  cta.addEventListener('click', play);
+  $('again').onclick = reset;
+  $('replayPanel').onclick = play;
+
+  // debug: pose the glow at a named point for screenshots
+  window.__pose = (name, done) => {
+    reset(); phone.classList.add('busy', 'run', 'glowing'); if (done) phone.classList.add('done');
+    cta.classList.add('glowing'); if (!(name === 'bottom' || name === 'pill')) phone.classList.add('whoosh');
+    const p = pos(H()); anim(glow, [{ transform: p[name], opacity: 1 }, { transform: p[name], opacity: 1 }], { duration: 1 });
+    if (name === 'center') anim(core, [{ opacity: 1, transform: 'scale(1.9)' }, { opacity: 1, transform: 'scale(1.9)' }], { duration: 1 });
+  };
+})();
+</script>
+</body>
+</html>
