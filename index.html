@@ -2,18 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="only light">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bank Redirect Glow</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{
+  :root{color-scheme:only light;
     --bg:#ffffff; --text:#0b0d12; --muted:#5f6b7a; --line:#eef0f3; --chip:#f5f6f8; --page:#eceef2;
     --violet:#7a3df2; --pink:#f3b4e6; --peach:#f7a464; --core:#f6c9ec;
   }
-  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --page:#16181d; } }
-  :root[data-theme="dark"]{ --page:#16181d; }
-  .phone[data-theme="dark"]{ --bg:#0e1014; --text:#f4f5f7; --muted:#97a1ae; --line:#1d2129; --chip:#1a1d24; }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:Figtree,system-ui,sans-serif;background:var(--page);color:var(--text);
@@ -64,7 +62,6 @@
         transition:opacity .55s cubic-bezier(.4,0,.2,1);background:rgba(255,255,255,.45);
         -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
   .phone.busy .veil{opacity:1}
-  .phone[data-theme="dark"] .veil{background:rgba(14,16,20,.6)}
   .whiteout{position:absolute;inset:0;z-index:2;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .5s cubic-bezier(.4,0,.2,1)}
   .phone.done .whiteout{opacity:1}
 
@@ -182,14 +179,13 @@
   <h3>Bank redirect · glow</h3>
   <p>Pick a bank and tap <b>Continue</b>. The tap is the user gesture that lets the browser vibrate.</p>
   <div class="row"><span>Haptics on this device</span><code id="hapMode">–</code></div>
-  <div class="row"><span>Preview dark mode</span><input type="checkbox" id="darkToggle"></div>
   <button class="btn" id="replayPanel">Replay</button>
   <ol>
     <li>Button greys, then turns into a glowing pill</li>
     <li>Screen blurs; violet → pink → peach glow builds at the bottom</li>
     <li>Glow shoots up through the middle to the top: jolt + rumble</li>
     <li>"Opening Lloyds" ✓, glow fades into the notch, bank app opens</li>
-    <li>Dark mode / Reduce Motion: plain loading state</li>
+    <li>Always light, even if the phone is in dark mode</li>
   </ol>
 </aside>
 
@@ -199,14 +195,8 @@
   const phone = $('phone'), stage = $('stage'), glow = $('glow'), core = $('core');
   const cta = $('cta'), title = $('title'), handoff = $('handoff');
 
-  /* ---------- theme: effect is light-mode only ---------- */
-  const mqDark = matchMedia('(prefers-color-scheme: dark)');
+  /* always light: the page ignores the phone's dark mode */
   const mqReduce = matchMedia('(prefers-reduced-motion: reduce)');
-  let forcedDark = false;
-  const isDark = () => forcedDark || mqDark.matches;
-  const applyTheme = () => phone.dataset.theme = isDark() ? 'dark' : 'light';
-  applyTheme(); mqDark.addEventListener?.('change', applyTheme);
-  $('darkToggle').onchange = e => { forcedDark = e.target.checked; applyTheme(); };
 
   /* bank selection */
   document.querySelectorAll('.bank').forEach(b => b.onclick = () => {
@@ -280,7 +270,7 @@
     cta.classList.add('pressed');
     buzz([10]);                                    // tick inside the tap gesture
 
-    if (isDark() || mqReduce.matches) {           // light-mode only → plain loading state
+    if (mqReduce.matches) {                       // Reduce Motion → plain loading state
       at(250, () => { phone.classList.add('busy'); cta.classList.add('glowing'); });
       at(2200, () => { phone.classList.add('done'); title.textContent = 'Opening ' + bank; });
       at(3000, () => handoff.classList.add('show'));
