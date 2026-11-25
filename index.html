@@ -48,12 +48,15 @@
        transition:transform .25s cubic-bezier(.2,.8,.2,1), opacity .35s ease, background-color .2s ease;will-change:transform,opacity}
   .cta.pressed{transform:scale(.97);background-color:#8a8f98}
   .cta.glowing{opacity:0;transform:scale(1.04);pointer-events:none}
-  .pillGlow{position:absolute;left:0;right:0;bottom:7px;height:100px;z-index:2;pointer-events:none;opacity:0;transform:scaleX(.85);
-       transition:opacity .45s ease, transform .7s cubic-bezier(.2,.8,.2,1);will-change:opacity,transform;
-       background:linear-gradient(90deg,var(--violet) 8%,var(--pink) 32%,#fff 50%,#ffd9bd 66%,var(--peach) 92%);
-       -webkit-mask-image:radial-gradient(closest-side,#000 45%,transparent 100%);mask-image:radial-gradient(closest-side,#000 45%,transparent 100%)}
-  .phone.glowing .pillGlow{opacity:1;transform:scaleX(1)}
-  .phone.whoosh .pillGlow{opacity:0;transition:opacity .18s ease}
+  .pillGlow{position:absolute;left:-6%;right:-6%;bottom:-14px;height:150px;z-index:2;pointer-events:none;opacity:0;transform:scale(.8,.6);
+       transform-origin:50% 100%;will-change:opacity,transform;
+       transition:opacity .5s ease, transform .9s cubic-bezier(.2,.8,.2,1);
+       background:linear-gradient(90deg,var(--violet) 6%,var(--pink) 34%,#fbe3f4 50%,#ffdcc4 64%,var(--peach) 94%);
+       -webkit-mask-image:radial-gradient(closest-side,rgba(0,0,0,.9) 0%,rgba(0,0,0,.55) 45%,rgba(0,0,0,.15) 75%,transparent 100%);
+               mask-image:radial-gradient(closest-side,rgba(0,0,0,.9) 0%,rgba(0,0,0,.55) 45%,rgba(0,0,0,.15) 75%,transparent 100%)}
+  .phone.glowing .pillGlow{opacity:.9;transform:none}
+  /* once the glow has risen, the pill melts into it instead of sitting as a band */
+  .phone.landed .pillGlow{opacity:0;transform:scale(1.15,1.6);transition:opacity 1.1s cubic-bezier(.4,0,.2,1), transform 1.1s cubic-bezier(.4,0,.2,1)}
 
   /* ---------- overlay: only transform + opacity ever animate ---------- */
   /* fx layer: glow + pill + logo/copy. Only this layer shakes, so the blurred
@@ -131,7 +134,7 @@
     .app{inset:48px 0 0 0}
     .hero{top:48px}
     .cta{bottom:calc(20px + env(safe-area-inset-bottom))}
-    .pillGlow{bottom:calc(-3px + env(safe-area-inset-bottom))}
+    .pillGlow{bottom:calc(-24px + env(safe-area-inset-bottom))}
     .panel{display:none}
   }
 </style>
@@ -206,8 +209,8 @@
     <li>Button greys, then turns into a glowing pill</li>
     <li>Screen blurs; violet → pink → peach glow builds at the bottom</li>
     <li>Glow keeps swirling for as long as the bank takes to respond</li>
-    <li>Bank link ready → glow shoots up to the top: jolt + rumble, logo bounces</li>
-    <li>Glow stays alive at the top until the bank app has opened</li>
+    <li>Bank link ready → glow surges at the bottom: jolt + rumble, logo bounces</li>
+    <li>Glow stays alive at the bottom until the bank app has opened</li>
     <li>Always light, even if the phone is in dark mode</li>
   </ol>
 </aside>
@@ -252,6 +255,7 @@
     pill:   `translateY(${h * 0.80}px) scale(.7,.35)`,
     bottom: `translateY(${h * 0.62}px) scale(1,1)`,
     swell:  `translateY(${h * 0.58}px) scale(1.06,1.12)`,
+    surge:  `translateY(${h * 0.55}px) scale(1.12,1.3)`,
     center: `translateY(${h * 0.24}px) scale(.82,1.05)`,
     top:    `translateY(${-h * 0.17}px) scale(1,.85)`,
     gone:   `translateY(${-h * 0.32}px) scale(.45,.4)`,
@@ -274,13 +278,44 @@
       const r = amp * .1 * d * Math.sin(t * 6.283 * (hz - 1) + 2);
       kf.push({ transform: `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) rotate(${r.toFixed(3)}deg)` });
     }
-    anim(fx, kf, { duration: dur, easing: 'linear', fill: 'none' });
+    anim(shakeEl(), kf, { duration: dur, easing: 'linear', fill: 'none', composite: 'add' });
+  }
+
+  // on a phone the content buzzes; on desktop the whole device frame buzzes, like a real phone on a table
+  const shakeEl = () => (innerWidth <= 500 ? fx : phone);
+
+  // vibrate(): real haptics + a visible motor-buzz that follows the exact same on/off pattern
+  function vibrate(pattern, amp = 2) {
+    buzz(pattern);
+    const FRAME = 1000 / 60, kf = [];
+    let t = 0;
+    const total = pattern.reduce((a, b, i) => a + (i % 2 ? b : Math.max(b, 70)), 0);
+    kf.push({ transform: 'translate3d(0,0,0)', offset: 0 });
+    pattern.forEach((d, i) => {
+      const on = i % 2 === 0, len = on ? Math.max(d, 70) : d;   // keep very short ticks visible
+      if (on) {
+        const steps = Math.max(2, Math.round(len / FRAME));
+        for (let k = 1; k <= steps; k++) {
+          const s = k % 2 ? 1 : -1, fade = 1 - (k / steps) * .35;
+          const x = s * amp * fade, y = -s * amp * .45 * fade * (k % 3 ? 1 : -1), r = s * amp * .12 * fade;
+          kf.push({ transform: `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) rotate(${r.toFixed(3)}deg)`, offset: Math.min(1, (t + k * len / steps) / total) });
+        }
+        kf.push({ transform: 'translate3d(0,0,0)', offset: Math.min(1, (t + len) / total) });
+      } else {
+        kf.push({ transform: 'translate3d(0,0,0)', offset: Math.min(1, (t + len) / total) });
+      }
+      t += len;
+    });
+    kf[kf.length - 1].offset = 1;
+    // offsets must not decrease
+    for (let i = 1; i < kf.length; i++) if (kf[i].offset < kf[i - 1].offset) kf[i].offset = kf[i - 1].offset;
+    anim(shakeEl(), kf, { duration: total, easing: 'linear', fill: 'none', composite: 'add' });
   }
 
   function reset() {
     timers.forEach(clearTimeout); timers = [];
     anims.forEach(a => a.cancel()); anims = []; glowAnim = null;
-    phone.classList.remove('busy', 'run', 'done', 'glowing', 'whoosh', 'paused');
+    phone.classList.remove('busy', 'run', 'done', 'glowing', 'whoosh', 'paused', 'landed');
     cta.className = 'cta'; cta.disabled = false;
     handoff.classList.remove('show');
     setCopy(phone.dataset.bank);
@@ -292,7 +327,7 @@
     setCopy(bank);
     cta.disabled = true;
     cta.classList.add('pressed');
-    buzz([10]);                                    // tick inside the tap gesture
+    vibrate([12], 1);                              // tick inside the tap gesture
 
     // In the real build this is the API call that returns the bank's auth URL.
     const bankReady = new Promise(r => at(+$('waitSel').value, r));
@@ -310,11 +345,12 @@
       cta.classList.remove('pressed'); cta.classList.add('glowing');
       glowTo([{ transform: p.hidden, opacity: 0 }, { transform: p.pill, opacity: .75, offset: .35 }, { transform: p.bottom, opacity: 1 }],
              { duration: 1300, easing: 'cubic-bezier(.22,.8,.3,1)' }).finished.then(r, () => {});
-      shake(1.5, 260, 12);
     }));
-    // 2 · while we wait for the bank: glow swirls and breathes (pure CSS loops), soft heartbeat
-    const beat = () => { buzz([8, 140, 8]); at(4800, beat); };
-    at(1500, beat);
+    // glow lands → buzz, pill melts into the glow
+    landed.then(() => { phone.classList.add('landed'); vibrate([40], 2); });
+    // 2 · while we wait for the bank: glow swirls and breathes; double-pulse "heartbeat" on each breath
+    const beat = () => { vibrate([30, 90, 30], 1.6); at(4800, beat); };
+    at(2900, beat);
 
     // 3 · bank link ready (and glow has landed) → whoosh, then open the bank
     Promise.all([landed, bankReady]).then(() => {
@@ -323,17 +359,17 @@
     });
   }
 
-  // bottom → centre (bright ball) → top in one continuous curve; glow then stays alive at the top
+  // bank ready: the glow surges in place at the bottom (swells up, brightens, settles back) — it never leaves the bottom
   function whoosh(p) {
     phone.classList.add('whoosh');
     const w = glowTo([
       { transform: p.bottom, opacity: 1 },
-      { transform: p.center, opacity: 1, offset: .48 },
-      { transform: p.top,    opacity: 1 }],
-      { duration: 480, easing: 'cubic-bezier(.6,0,.25,1)' });
-    anim(core, [{ opacity: .7, transform: 'scale(1)' }, { opacity: 1, transform: 'scale(1.8)', offset: .5 }, { opacity: .8, transform: 'scale(1.15)' }],
-         { duration: 480, easing: 'cubic-bezier(.6,0,.25,1)' });
-    at(170, () => { shake(6, 600); buzz([55, 20, 55, 20, 90, 25, 30, 20, 30, 20, 20]); });
+      { transform: p.surge,  opacity: 1, offset: .4 },
+      { transform: p.bottom, opacity: 1 }],
+      { duration: 900, easing: 'cubic-bezier(.45,0,.25,1)' });
+    anim(core, [{ opacity: .7, transform: 'scale(1)' }, { opacity: 1, transform: 'scale(1.6)', offset: .4 }, { opacity: .85, transform: 'scale(1.1)' }],
+         { duration: 900, easing: 'cubic-bezier(.45,0,.25,1)' });
+    at(170, () => { shake(7, 700); vibrate([70, 25, 70, 25, 120, 30, 45, 25, 45, 25, 30], 2.6); });
     at(150, () => anim(tileEl, [
       { transform: 'scale(1)' }, { transform: 'scale(.9,1.08)', offset: .25 }, { transform: 'scale(1.06,.95)', offset: .55 },
       { transform: 'scale(.98,1.01)', offset: .8 }, { transform: 'scale(1)' }], { duration: 560, easing: 'ease-out', fill: 'none' }));
