@@ -59,7 +59,7 @@
   .phone.landed .pillGlow{opacity:0;transform:scale(1.15,1.6);transition:opacity 1.1s cubic-bezier(.4,0,.2,1), transform 1.1s cubic-bezier(.4,0,.2,1)}
 
   /* ---------- overlay: only transform + opacity ever animate ---------- */
-  /* fx layer: glow + pill + logo/copy. Only this layer shakes, so the blurred
+  /* fx layer: glow + pill + logo/copy, kept on its own GPU layer so the blurred
      background never has to be re-blurred mid-animation. */
   .fx{position:absolute;inset:0;z-index:3;pointer-events:none;will-change:transform}
   .veil{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;will-change:opacity;
@@ -98,11 +98,13 @@
   .hero{position:absolute;top:102px;left:0;right:0;bottom:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;
         padding:0 20px;pointer-events:none;opacity:0;transition:opacity .35s ease}
   .phone.busy .hero{opacity:1}
-  .bankTile{width:80px;height:80px;border-radius:18px;flex:none;will-change:transform;transform:scale(.86);
+  /* Figma 1722:73538 — 80×80, 6px Neutral/Grey/100 border inside, r24, clip, shadow 0 24 48 rgba(119,137,148,.25) */
+  .bankTile{box-sizing:border-box;width:80px;height:80px;border:6px solid #f2f5f6;border-radius:24px;overflow:hidden;flex:none;
+            background:#f2f5f6;will-change:transform;transform:scale(.86);
             transition:transform .6s cubic-bezier(.2,1.4,.4,1);
-            box-shadow:0 0 0 5px #f2f5f6,0 16px 40px rgba(13,16,17,.08)}
+            box-shadow:0 24px 48px 0 rgba(119,137,148,.25)}
   .phone.busy .bankTile{transform:none}
-  .bankTile img{display:block;width:80px;height:80px;border-radius:18px}
+  .bankTile img{display:block;width:100%;height:100%;object-fit:cover}
   .copy{width:100%;max-width:335px;margin-top:20px;display:flex;flex-direction:column;gap:12px;text-align:center}
   .copy h1{font-family:Figtree,system-ui,sans-serif;font-weight:800;font-size:20px;line-height:28px;letter-spacing:0;color:#0d1011}
   .copy p{font-weight:500;font-size:12px;line-height:18px;color:#6a8090}
@@ -209,8 +211,7 @@
     <li>Button greys, then turns into a glowing pill</li>
     <li>Screen blurs; violet → pink → peach glow builds at the bottom</li>
     <li>Glow keeps swirling for as long as the bank takes to respond</li>
-    <li>Bank link ready → glow surges at the bottom: jolt + rumble, logo bounces</li>
-    <li>Glow stays alive at the bottom until the bank app has opened</li>
+    <li>Bank link ready → bank app opens; the glow stays calm at the bottom until then</li>
     <li>Always light, even if the phone is in dark mode</li>
   </ol>
 </aside>
@@ -268,49 +269,9 @@
   // hand the glow from one animation to the next in the same frame → no seams
   const glowTo = (kf, opt) => { const prev = glowAnim; glowAnim = anim(glow, kf, opt); prev && prev.cancel(); return glowAnim; };
 
-  // damped shake, generated so it decays like a real vibration motor
-  function shake(amp, dur, hz = 9) {
-    const n = 36, kf = [];
-    for (let i = 0; i <= n; i++) {
-      const t = i / n, d = Math.exp(-4.5 * t);
-      const x = amp * d * Math.sin(t * 6.283 * hz);
-      const y = amp * .35 * d * Math.sin(t * 6.283 * (hz - 2) + 1);
-      const r = amp * .1 * d * Math.sin(t * 6.283 * (hz - 1) + 2);
-      kf.push({ transform: `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) rotate(${r.toFixed(3)}deg)` });
-    }
-    anim(shakeEl(), kf, { duration: dur, easing: 'linear', fill: 'none', composite: 'add' });
-  }
 
-  // on a phone the content buzzes; on desktop the whole device frame buzzes, like a real phone on a table
-  const shakeEl = () => (innerWidth <= 500 ? fx : phone);
-
-  // vibrate(): real haptics + a visible motor-buzz that follows the exact same on/off pattern
-  function vibrate(pattern, amp = 2) {
-    buzz(pattern);
-    const FRAME = 1000 / 60, kf = [];
-    let t = 0;
-    const total = pattern.reduce((a, b, i) => a + (i % 2 ? b : Math.max(b, 70)), 0);
-    kf.push({ transform: 'translate3d(0,0,0)', offset: 0 });
-    pattern.forEach((d, i) => {
-      const on = i % 2 === 0, len = on ? Math.max(d, 70) : d;   // keep very short ticks visible
-      if (on) {
-        const steps = Math.max(2, Math.round(len / FRAME));
-        for (let k = 1; k <= steps; k++) {
-          const s = k % 2 ? 1 : -1, fade = 1 - (k / steps) * .35;
-          const x = s * amp * fade, y = -s * amp * .45 * fade * (k % 3 ? 1 : -1), r = s * amp * .12 * fade;
-          kf.push({ transform: `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) rotate(${r.toFixed(3)}deg)`, offset: Math.min(1, (t + k * len / steps) / total) });
-        }
-        kf.push({ transform: 'translate3d(0,0,0)', offset: Math.min(1, (t + len) / total) });
-      } else {
-        kf.push({ transform: 'translate3d(0,0,0)', offset: Math.min(1, (t + len) / total) });
-      }
-      t += len;
-    });
-    kf[kf.length - 1].offset = 1;
-    // offsets must not decrease
-    for (let i = 1; i < kf.length; i++) if (kf[i].offset < kf[i - 1].offset) kf[i].offset = kf[i - 1].offset;
-    anim(shakeEl(), kf, { duration: total, easing: 'linear', fill: 'none', composite: 'add' });
-  }
+  // vibrate(): phone haptics only — nothing on screen shakes
+  const vibrate = pattern => buzz(pattern);
 
   function reset() {
     timers.forEach(clearTimeout); timers = [];
@@ -352,33 +313,15 @@
     const beat = () => { vibrate([30, 90, 30], 1.6); at(4800, beat); };
     at(2900, beat);
 
-    // 3 · bank link ready (and glow has landed) → whoosh, then open the bank
+    // 3 · bank link ready (and glow has landed) → open the bank, no end effect
     Promise.all([landed, bankReady]).then(() => {
       timers.forEach(clearTimeout); timers = [];  // stop heartbeat
-      whoosh(p).then(openBank);
+      openBank();                                  // the glow just keeps breathing until the bank app opens
     });
   }
 
-  // bank ready: the glow surges in place at the bottom (swells up, brightens, settles back) — it never leaves the bottom
-  function whoosh(p) {
-    phone.classList.add('whoosh');
-    const w = glowTo([
-      { transform: p.bottom, opacity: 1 },
-      { transform: p.surge,  opacity: 1, offset: .4 },
-      { transform: p.bottom, opacity: 1 }],
-      { duration: 900, easing: 'cubic-bezier(.45,0,.25,1)' });
-    anim(core, [{ opacity: .7, transform: 'scale(1)' }, { opacity: 1, transform: 'scale(1.6)', offset: .4 }, { opacity: .85, transform: 'scale(1.1)' }],
-         { duration: 900, easing: 'cubic-bezier(.45,0,.25,1)' });
-    at(170, () => { shake(7, 700); vibrate([70, 25, 70, 25, 120, 30, 45, 25, 45, 25, 30], 2.6); });
-    at(150, () => anim(tileEl, [
-      { transform: 'scale(1)' }, { transform: 'scale(.9,1.08)', offset: .25 }, { transform: 'scale(1.06,.95)', offset: .55 },
-      { transform: 'scale(.98,1.01)', offset: .8 }, { transform: 'scale(1)' }], { duration: 560, easing: 'ease-out', fill: 'none' }));
-    at(240, () => phone.classList.add('done'));   // background clears to the plain white Figma screen
-    return w.finished.catch(() => {});
-  }
-
   // Real build: window.location.href = bankAuthUrl. The page stays on screen (glow still alive
-  // at the top) until the OS switches to the bank app — then visibilitychange pauses it.
+  // at the bottom) until the OS switches to the bank app — then visibilitychange pauses it.
   function openBank() {
     at(1200, () => handoff.classList.add('show')); // prototype: stands in for the bank app opening
   }
